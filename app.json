@@ -1,0 +1,46 @@
+{
+  "expo": {
+    "name": "quiz-battle",
+    "scheme": "airbase",
+    "slug": "quiz-battle",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./src/assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./src/assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.airbase",
+      "infoPlist": {
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.518778819608-uji91aamgfbdqe3sdh2u9ks2f18gkbvm.apps.googleusercontent.com"
+            ]
+          }
+        ]
+      }
+    },
+    "android": {
+      "package": "com.airbase",
+      "adaptiveIcon": {
+        "foregroundImage": "./src/assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./src/assets/favicon.png"
+    },
+    "plugins": [
+      "expo-video",
+      "expo-font"
+    ]
+  }
+}
