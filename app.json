@@ -22,8 +22,14 @@
             "CFBundleURLSchemes": [
               "com.googleusercontent.apps.518778819608-uji91aamgfbdqe3sdh2u9ks2f18gkbvm.apps.googleusercontent.com"
             ]
+          },
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.518778819608-uji91aamgfbdqe3sdh2u9ks2f18gkbvm.apps.googleusercontent.com"
+            ]
           }
-        ]
+        ],
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -41,6 +47,12 @@
     "plugins": [
       "expo-video",
       "expo-font"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "2d8f0f12-1e3b-47be-b4f4-1e8845804811"
+      }
+    },
+    "owner": "aryandarekar"
   }
 }
