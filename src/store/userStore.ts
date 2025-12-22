@@ -6,11 +6,20 @@ interface UserStats {
   totalMatches: number;
 }
 
-interface UserProfile {
+export interface UserProfile {
   uid: string;
-  displayName: string;
-  email: string;
-  photoURL: string;
+  email: string | null;
+  displayName?: string | null;
+  photoURL?: string | null;
+  
+  // Extended Profile
+  name?: string;
+  username?: string;
+  standard?: string;
+  coaching?: string;
+  selectedCharacter?: string;
+  isProfileComplete?: boolean;
+  
   rank: 'Bronze' | 'Silver' | 'Gold' | 'Grandmaster';
   xp: number;
   stats: UserStats;
@@ -29,12 +38,13 @@ export const useUserStore = create<UserState>((set) => ({
   isLoading: true,
   setUser: (user) => set({ user }),
   setLoading: (isLoading) => set({ isLoading }),
-  
-  // Example action to update XP locally
   updateXP: (amount) => set((state) => {
     if (!state.user) return {};
     return {
-      user: { ...state.user, xp: state.user.xp + amount }
+      user: {
+        ...state.user,
+        xp: state.user.xp + amount
+      }
     };
   }),
 }));

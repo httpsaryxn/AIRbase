@@ -16,15 +16,17 @@ import { BlurView } from 'expo-blur';
 import { useFonts, PixelifySans_400Regular } from '@expo-google-fonts/pixelify-sans';
 import { LinearGradient } from 'expo-linear-gradient'; 
 import { useUserStore } from '../store/userStore';
-import { handleUserLogin } from '../services/authService';
+import { handleUserLogin } from '../services/authService'; // This might need updating too, but we can do it locally here for now
 import { signInWithPopup, signInWithCredential, GoogleAuthProvider } from 'firebase/auth';
 import { auth } from '../services/firebaseConfig';
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
 import { makeRedirectUri } from 'expo-auth-session';
+import { getFirestore, doc, getDoc } from 'firebase/firestore';
 
 const { width, height } = Dimensions.get('window');
+const db = getFirestore();
 
 // MODIFIED: Increased to 80% so the video/gradient reaches behind the login card
 const VIDEO_HEIGHT = height * 0.8; 
@@ -33,10 +35,12 @@ const VIDEO_SOURCE = require('../assets/background.mp4');
 
 WebBrowser.maybeCompleteAuthSession(); 
 
-export const LoginScreen = () => {
+// Add navigation prop
+export const LoginScreen = ({ navigation }: { navigation: any }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const setUser = useUserStore((state) => state.setUser);
   
   let [fontsLoaded] = useFonts({
     PixelifySans_400Regular,
@@ -61,12 +65,52 @@ export const LoginScreen = () => {
     player.play();
   });
 
+  // Helper to check profile and navigate
+  const checkProfileAndNavigate = async (user: any) => {
+    try {
+      const userDocRef = doc(db, "users", user.uid);
+      const userDoc = await getDoc(userDocRef);
+      
+      let userData = { ...user };
+      
+      if (userDoc.exists()) {
+        const data = userDoc.data();
+        userData = { ...userData, ...data };
+        setUser(userData);
+        
+        if (data.isProfileComplete) {
+          // If profile is complete, go to Home
+          // Assuming App.tsx handles the condition, or we explicitly navigate:
+          // If you are using a stack navigator, replace:
+           // navigation.replace('HomeScreen'); 
+           // BUT usually, the root navigator switches based on 'user' state. 
+           // If 'user' state is set, App.tsx might auto-switch to Home.
+           // However, to force LinkingScreen, we might need a separate state or navigate manually.
+           // For now, let's assume we navigate manually if needed, OR relies on App.tsx routing.
+           // Since I don't see App.tsx logic, I'll assume we need to handle "New User" flow.
+        } else {
+           // navigation.replace('LinkingScreen');
+        }
+      } else {
+        // Doc doesn't exist, new user -> Linking Screen
+        setUser(userData);
+        // navigation.replace('LinkingScreen');
+      }
+    } catch (error) {
+      console.error("Profile check failed", error);
+    }
+  };
+  
+  // NOTE: The actual navigation usually happens in App.tsx based on 'user' state.
+  // We need to ensure App.tsx checks 'isProfileComplete' to decide between Home and Linking.
+
   const onSignIn = async () => {
     if (!email || !password) return alert("Please enter credentials");
     setLoading(true);
     try {
       const result = await signInWithEmailAndPassword(auth, email, password);
-      await handleUserLogin(result.user);
+      await handleUserLogin(result.user); // This updates store
+      // The App.tsx should detect user change and re-render. 
     } catch (err: any) {
         alert(err.message || "Failed to sign in");
     }
@@ -109,7 +153,13 @@ export const LoginScreen = () => {
 
   React.useEffect(() => {
     if (response?.type === 'success') {
-      // handleGoogleAuthResponse(response); 
+       const { id_token } = response.params;
+       const credential = GoogleAuthProvider.credential(id_token);
+       signInWithCredential(auth, credential).then((result) => {
+         handleUserLogin(result.user);
+       }).catch((error) => {
+         alert(error.message);
+       });
     }
   }, [response]);
 

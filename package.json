@@ -9,6 +9,7 @@
     "web": "expo start --web"
   },
   "dependencies": {
+    "@expo-google-fonts/exo": "^0.4.2",
     "@expo-google-fonts/pixelify-sans": "^0.4.2",
     "@expo-google-fonts/vt323": "^0.4.1",
     "@react-native-async-storage/async-storage": "2.2.0",
@@ -18,6 +19,7 @@
     "clsx": "^2.1.1",
     "eas": "^0.1.0",
     "expo": "~54.0.29",
+    "expo-app-loading": "^2.1.1",
     "expo-auth-session": "^7.0.10",
     "expo-av": "~16.0.8",
     "expo-blur": "^15.0.8",
