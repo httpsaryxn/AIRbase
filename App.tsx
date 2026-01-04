@@ -11,6 +11,10 @@ import { auth, db } from './src/services/firebaseConfig';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { LinkingScreen } from './src/screens/LinkingScreen';
+import { CustomBattleScreen } from './src/screens/CustomBattleScreen';
+import { LobbyScreen } from './src/screens/LobbyScreen';
+import { GameScreen } from './src/screens/GameScreen'; 
+import { ResultsScreen } from './src/screens/ResultsScreen'; 
 import { useUserStore, UserProfile } from './src/store/userStore';
 
 const Stack = createNativeStackNavigator();
@@ -25,29 +29,24 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         try {
-          // Fetch additional user data from Firestore
           const userDocRef = doc(db, "users", firebaseUser.uid);
           const userSnap = await getDoc(userDocRef);
 
           if (userSnap.exists()) {
             const firestoreData = userSnap.data();
-            // Merge auth user with firestore data
             const fullUserProfile: UserProfile = {
               uid: firebaseUser.uid,
               email: firebaseUser.email,
               displayName: firebaseUser.displayName,
               photoURL: firebaseUser.photoURL,
-              // Default values if missing
               rank: firestoreData.rank || 'Bronze',
               xp: firestoreData.xp || 0,
               stats: firestoreData.stats || { wins: 0, losses: 0, totalMatches: 0 },
-              // Extended fields
               ...firestoreData, 
             } as UserProfile;
             
             setUser(fullUserProfile);
           } else {
-            // New user, minimal profile
             setUser({
               uid: firebaseUser.uid,
               email: firebaseUser.email,
@@ -84,14 +83,17 @@ export default function App() {
       <StatusBar style="light" />
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {!user ? (
-          // 1. Not logged in -> Login Screen
           <Stack.Screen name="Login" component={LoginScreen} />
         ) : !user.isProfileComplete ? (
-          // 2. Logged in but profile incomplete -> Linking Screen
           <Stack.Screen name="Linking" component={LinkingScreen} />
         ) : (
-          // 3. Logged in and complete -> Home Screen
-          <Stack.Screen name="Home" component={HomeScreen} />
+          <Stack.Group>
+            <Stack.Screen name="Home" component={HomeScreen} />
+            <Stack.Screen name="CustomBattle" component={CustomBattleScreen} />
+            <Stack.Screen name="Lobby" component={LobbyScreen} />
+            <Stack.Screen name="Game" component={GameScreen} />
+            <Stack.Screen name="Results" component={ResultsScreen} />
+          </Stack.Group>
         )}
       </Stack.Navigator>
     </NavigationContainer>

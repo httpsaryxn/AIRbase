@@ -5,7 +5,6 @@ import { BlurView } from 'expo-blur';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { useFonts, Exo_700Bold, Exo_400Regular } from '@expo-google-fonts/exo';
 import { useUserStore } from '../store/userStore';
-// Removed TutorialOverlay import as requested
 
 const { width, height } = Dimensions.get('window');
 
@@ -47,13 +46,11 @@ interface DisplayUser {
 }
 
 // Small Cloud Component for Tutorial
-// Added 'arrowDirection' prop to handle up/down/left/right pointing arrows
 const TutorialCloud = ({ text, style, delay = 0, arrowDirection = 'down' }: { text: string, style: any, delay?: number, arrowDirection?: 'up' | 'down' | 'left' | 'right' }) => {
   const [visible, setVisible] = useState(false);
   const fadeAnim = useState(new Animated.Value(0))[0];
 
   useEffect(() => {
-    // Show after delay
     const showTimer = setTimeout(() => {
       setVisible(true);
       Animated.timing(fadeAnim, {
@@ -62,7 +59,6 @@ const TutorialCloud = ({ text, style, delay = 0, arrowDirection = 'down' }: { te
         useNativeDriver: true,
       }).start();
 
-      // Hide after showing for a while (e.g., 5 seconds)
       const hideTimer = setTimeout(() => {
         Animated.timing(fadeAnim, {
           toValue: 0,
@@ -83,21 +79,23 @@ const TutorialCloud = ({ text, style, delay = 0, arrowDirection = 'down' }: { te
     <Animated.View style={[styles.cloudBubble, style, { opacity: fadeAnim }]}>
       {arrowDirection === 'up' && <View style={[styles.cloudTail, styles.cloudTailUp]} />}
       {arrowDirection === 'left' && <View style={[styles.cloudTail, styles.cloudTailLeft]} />}
-      
       <Text style={styles.cloudText}>{text}</Text>
-      
       {arrowDirection === 'down' && <View style={styles.cloudTail} />}
       {arrowDirection === 'right' && <View style={[styles.cloudTail, styles.cloudTailRight]} />}
     </Animated.View>
   );
 };
 
-export const HomeScreen = () => {
+export const HomeScreen = ({ navigation }: { navigation: any }) => {
   const user = useUserStore((state) => state.user);
   const [selectedSubject, setSelectedSubject] = useState('ALL(random)');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [currentTheme, setCurrentTheme] = useState<'mint' | 'yellow'>('mint'); 
   
+  // Battle Mode State: 'quick' or 'custom'
+  const [battleMode, setBattleMode] = useState<'quick' | 'custom'>('quick');
+  const [isBattleDropdownOpen, setIsBattleDropdownOpen] = useState(false);
+
+  const [currentTheme, setCurrentTheme] = useState<'mint' | 'yellow'>('mint'); 
   const subjects = ['ALL(random)', 'Physics', 'Chemistry', 'Math'];
 
   let [fontsLoaded] = useFonts({
@@ -137,6 +135,27 @@ export const HomeScreen = () => {
     xp: 2450,
     coaching: "PhysicsWallah",
     stats: { wins: 42, losses: 12, totalMatches: 54 }
+  };
+
+  // Main Action Trigger
+  const handleMainAction = () => {
+    if (battleMode === 'custom') {
+        navigation.navigate('CustomBattle');
+    } else {
+        // Quick Match Logic (Simulated or Navigate to new RandomBattle screen)
+        alert("Starting Quick Match..."); 
+    }
+  };
+
+  // Toggle dropdown
+  const toggleBattleDropdown = () => {
+    setIsBattleDropdownOpen(!isBattleDropdownOpen);
+  };
+
+  // Select Mode
+  const selectBattleMode = (mode: 'quick' | 'custom') => {
+    setBattleMode(mode);
+    setIsBattleDropdownOpen(false);
   };
 
   return (
@@ -179,7 +198,6 @@ export const HomeScreen = () => {
                 <View style={styles.onlineDot} />
             </BlurView>
             
-            {/* Tutorial Cloud for Gamertag - Centered Above Panel */}
             <TutorialCloud 
               text="Your Identity Card" 
               style={{ position: 'absolute', top: -50, alignSelf: 'center' }} 
@@ -196,7 +214,6 @@ export const HomeScreen = () => {
                         <Text style={{fontSize: 24}}>👤</Text>
                     </View>
                 </TouchableOpacity>
-                {/* Tutorial Cloud for Profile - Moved to RIGHT, pointing LEFT */}
                 <TutorialCloud 
                   text="Your Account" 
                   style={{ position: 'absolute', left: 70, top: 15 }} 
@@ -253,7 +270,6 @@ export const HomeScreen = () => {
                     </BlurView>
                 </View>
             )}
-            {/* Tutorial Cloud for Subject */}
             <TutorialCloud 
               text="Pick Subject" 
               style={{ position: 'absolute', top: -45, left: 10 }} 
@@ -261,16 +277,59 @@ export const HomeScreen = () => {
             />
         </View>
 
-        <View style={{position: 'relative'}}>
-            <TouchableOpacity style={styles.battleButton} activeOpacity={0.8}>
-                <BlurView intensity={40} tint="dark" style={[styles.battleButtonBlur, { backgroundColor: currentTheme === 'yellow' ? '#FFD700' : '#4ADE80' }]}>
-                    <Text style={styles.battleButtonText}>BATTLE</Text>
-                    <Text style={styles.battleButtonSub}>FIND MATCH</Text>
+        {/* REDESIGNED BATTLE BUTTON CONTAINER */}
+        <View style={{position: 'relative', zIndex: 20}}>
+            
+            {/* Split Button Concept: Left part triggers action, Right part triggers dropdown */}
+            <View style={styles.splitButtonContainer}>
+                <BlurView intensity={40} tint="dark" style={[styles.splitButtonBlur, { backgroundColor: currentTheme === 'yellow' ? '#FFD700' : '#4ADE80' }]}>
+                    
+                    {/* Main Action Area */}
+                    <TouchableOpacity 
+                        style={styles.mainActionButton} 
+                        onPress={handleMainAction}
+                        activeOpacity={0.8}
+                    >
+                        <Text style={styles.battleButtonText}>
+                            {battleMode === 'quick' ? 'QUICK BATTLE' : 'CUSTOM GAME'}
+                        </Text>
+                        <Text style={styles.battleButtonSub}>
+                            {battleMode === 'quick' ? 'FIND MATCH' : 'CREATE / JOIN'}
+                        </Text>
+                    </TouchableOpacity>
+
+                    {/* Divider */}
+                    <View style={styles.splitDivider} />
+
+                    {/* Dropdown Trigger Area */}
+                    <TouchableOpacity 
+                        style={styles.dropdownTriggerButton} 
+                        onPress={toggleBattleDropdown}
+                        activeOpacity={0.6}
+                    >
+                        <Text style={{fontSize: 14, color: '#000', transform: [{rotate: isBattleDropdownOpen ? '180deg' : '0deg'}]}}>▼</Text>
+                    </TouchableOpacity>
+
                 </BlurView>
-            </TouchableOpacity>
-            {/* Tutorial Cloud for Battle */}
+            </View>
+
+            {/* Dropdown Menu */}
+            {isBattleDropdownOpen && (
+                <View style={styles.battleDropdown}>
+                    <BlurView intensity={80} tint="dark" style={styles.battleDropdownBlur}>
+                        <TouchableOpacity style={styles.battleOption} onPress={() => selectBattleMode('quick')}>
+                            <Text style={[styles.battleOptionText, battleMode === 'quick' && styles.battleOptionSelected]}>⚡ QUICK MATCH</Text>
+                        </TouchableOpacity>
+                        <View style={styles.battleDivider} />
+                        <TouchableOpacity style={styles.battleOption} onPress={() => selectBattleMode('custom')}>
+                            <Text style={[styles.battleOptionText, battleMode === 'custom' && styles.battleOptionSelected]}>🏰 CUSTOM GAME</Text>
+                        </TouchableOpacity>
+                    </BlurView>
+                </View>
+            )}
+
             <TutorialCloud 
-              text="Start Fight!" 
+              text={battleMode === 'quick' ? "Find Opponent!" : "Host/Join Game"} 
               style={{ position: 'absolute', top: -45, right: 10 }} 
               delay={1000}
             />
@@ -293,7 +352,6 @@ export const HomeScreen = () => {
                     <Text style={{fontSize: 24, color: 'rgba(0,0,0,0.5)'}}>👤</Text>
                 </TouchableOpacity>
             </BlurView>
-            {/* Tutorial Cloud for Navigation */}
             <TutorialCloud 
               text="Menu" 
               style={{ position: 'absolute', top: -45, alignSelf: 'center' }} 
@@ -328,22 +386,22 @@ const styles = StyleSheet.create({
   gamertagPanelWrapper: {
     position: 'absolute',
     top: 600, 
-    left: width * 0.05, // Reduced left margin to effectively center wider panel
-    right: width * 0.05, // Reduced right margin
+    left: width * 0.05, 
+    right: width * 0.05,
     alignItems: 'center',
   },
   gamertagPanel: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20, // Increased padding
-    paddingVertical: 10, // Increased padding
-    borderRadius: 24, // Slightly larger radius
+    paddingHorizontal: 20, 
+    paddingVertical: 10, 
+    borderRadius: 24, 
     backgroundColor: 'rgba(255, 255, 255, 0.4)',
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.6)',
-    minWidth: '60%', // Ensure a minimum width to reduce clutter
-    justifyContent: 'center', // Center content
+    minWidth: '60%', 
+    justifyContent: 'center', 
   },
   rankBadge: {
     flexDirection: 'row',
@@ -351,7 +409,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 8,
-    marginRight: 15, // More spacing
+    marginRight: 15, 
   },
   badgeImage: {
     width: 18,
@@ -368,10 +426,10 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#000',
     fontFamily: 'Exo_700Bold', 
-    marginRight: 15, // More spacing
+    marginRight: 15, 
   },
   coachingBadgeContainer: {
-    marginRight: 15, // More spacing
+    marginRight: 15, 
     padding: 3,
     backgroundColor: 'rgba(255,255,255,0.5)',
     borderRadius: 12,
@@ -507,30 +565,85 @@ const styles = StyleSheet.create({
     color: '#000',
     backgroundColor: 'rgba(0,0,0,0.05)',
   },
-  battleButton: {
-    width: 140,
+  
+  // NEW STYLES FOR REDESIGNED BATTLE BUTTON
+  splitButtonContainer: {
+    width: 160,
     height: 65,
     borderRadius: 12,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.2)',
   },
-  battleButtonBlur: {
+  splitButtonBlur: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  mainActionButton: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    height: '100%',
+    paddingLeft: 5,
+  },
+  splitDivider: {
+    width: 1,
+    height: '60%',
+    backgroundColor: 'rgba(0,0,0,0.1)',
+  },
+  dropdownTriggerButton: {
+    width: 40,
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.1)', // Slightly distinct area
   },
   battleButtonText: {
     color: '#000',
-    fontSize: 20,
+    fontSize: 16, // Slightly smaller to fit "CUSTOM GAME"
     fontFamily: 'Exo_700Bold', 
-    letterSpacing: 1,
+    letterSpacing: 0.5,
+    textAlign: 'center',
   },
   battleButtonSub: {
     color: 'rgba(0,0,0,0.6)',
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: 'bold',
+    textAlign: 'center',
   },
+  battleDropdown: {
+    position: 'absolute',
+    bottom: 75,
+    right: 0,
+    width: 160,
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  battleDropdownBlur: {
+    backgroundColor: 'rgba(20, 20, 20, 0.95)',
+    paddingVertical: 5,
+  },
+  battleOption: {
+    paddingVertical: 12,
+    paddingHorizontal: 15,
+  },
+  battleOptionText: {
+    color: '#AAA',
+    fontSize: 14,
+    fontFamily: 'Exo_700Bold',
+  },
+  battleOptionSelected: {
+    color: '#FFF', // Highlight selected option
+  },
+  battleDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    marginHorizontal: 10,
+  },
+  
   bottomNavContainer: {
     position: 'absolute',
     bottom: 40,
