@@ -142,8 +142,7 @@ export const HomeScreen = ({ navigation }: { navigation: any }) => {
     if (battleMode === 'custom') {
         navigation.navigate('CustomBattle');
     } else {
-        // Quick Match Logic (Simulated or Navigate to new RandomBattle screen)
-        alert("Starting Quick Match..."); 
+        navigation.navigate('Matchmaking'); 
     }
   };
 
@@ -280,11 +279,9 @@ export const HomeScreen = ({ navigation }: { navigation: any }) => {
         {/* REDESIGNED BATTLE BUTTON CONTAINER */}
         <View style={{position: 'relative', zIndex: 20}}>
             
-            {/* Split Button Concept: Left part triggers action, Right part triggers dropdown */}
             <View style={styles.splitButtonContainer}>
                 <BlurView intensity={40} tint="dark" style={[styles.splitButtonBlur, { backgroundColor: currentTheme === 'yellow' ? '#FFD700' : '#4ADE80' }]}>
                     
-                    {/* Main Action Area */}
                     <TouchableOpacity 
                         style={styles.mainActionButton} 
                         onPress={handleMainAction}
@@ -298,10 +295,8 @@ export const HomeScreen = ({ navigation }: { navigation: any }) => {
                         </Text>
                     </TouchableOpacity>
 
-                    {/* Divider */}
                     <View style={styles.splitDivider} />
 
-                    {/* Dropdown Trigger Area */}
                     <TouchableOpacity 
                         style={styles.dropdownTriggerButton} 
                         onPress={toggleBattleDropdown}
@@ -313,7 +308,6 @@ export const HomeScreen = ({ navigation }: { navigation: any }) => {
                 </BlurView>
             </View>
 
-            {/* Dropdown Menu */}
             {isBattleDropdownOpen && (
                 <View style={styles.battleDropdown}>
                     <BlurView intensity={80} tint="dark" style={styles.battleDropdownBlur}>
@@ -585,7 +579,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     height: '100%',
-    paddingLeft: 5,
+    paddingLeft: 0, // Removed to ensure center alignment
   },
   splitDivider: {
     width: 1,

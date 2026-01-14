@@ -14,7 +14,8 @@ import { LinkingScreen } from './src/screens/LinkingScreen';
 import { CustomBattleScreen } from './src/screens/CustomBattleScreen';
 import { LobbyScreen } from './src/screens/LobbyScreen';
 import { GameScreen } from './src/screens/GameScreen'; 
-import { ResultsScreen } from './src/screens/ResultsScreen'; 
+import { ResultsScreen } from './src/screens/ResultsScreen';
+import { MatchmakingScreen } from './src/screens/MatchmakingScreen'; // New Import
 import { useUserStore, UserProfile } from './src/store/userStore';
 
 const Stack = createNativeStackNavigator();
@@ -93,6 +94,7 @@ export default function App() {
             <Stack.Screen name="Lobby" component={LobbyScreen} />
             <Stack.Screen name="Game" component={GameScreen} />
             <Stack.Screen name="Results" component={ResultsScreen} />
+            <Stack.Screen name="Matchmaking" component={MatchmakingScreen} />
           </Stack.Group>
         )}
       </Stack.Navigator>

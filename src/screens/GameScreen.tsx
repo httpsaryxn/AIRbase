@@ -90,7 +90,6 @@ export const GameScreen = ({ navigation, route }: { navigation: any, route: any 
         }
 
         // --- HOST LOGIC: CHECK FOR NEXT QUESTION ---
-        // Moved inside onSnapshot to ensure it runs whenever ANY player updates the DB
         if (newData.createdBy === user?.uid && newData.status === 'active') {
             const totalQ = newData.questions.length;
             const allPlayersAnsweredCurrent = newData.players.every((p: any) => 
@@ -98,22 +97,7 @@ export const GameScreen = ({ navigation, route }: { navigation: any, route: any 
             );
 
             if (allPlayersAnsweredCurrent) {
-                // Add a small delay for UX so players see "All Answered" before switch
-                // Use a local flag or check if we haven't already moved to avoid loops?
-                // Actually, if we update, the snapshot will fire again with new index, 
-                // and 'allPlayersAnsweredCurrent' will become false for the new index.
-                // So this is safe, but we need to debounce or ensure we don't spam updates.
-                
-                // We'll use a simple timeout, but we need to be careful not to set multiple.
-                // Since this runs on every snapshot, we check if we are ALREADY waiting? No easy way.
-                // Instead, we just trigger the update. Firestore writes are atomic.
-                
-                // Only trigger if we are NOT already moving (optional check, but logic holds)
-                
                 setTimeout(async () => {
-                    // Re-check latest state to be sure (in case of race conditions)
-                    // But for this simple app, just firing the update is usually fine.
-                    
                     if (newData.currentQuestionIndex < totalQ - 1) {
                         await updateDoc(doc(db, 'battleRooms', roomId), {
                             currentQuestionIndex: newData.currentQuestionIndex + 1
@@ -196,8 +180,6 @@ export const GameScreen = ({ navigation, route }: { navigation: any, route: any 
         await updateDoc(doc(db, 'battleRooms', roomId), {
             players: updatedPlayers
         });
-        
-        // Host logic is now handled in onSnapshot to ensure sync
     } catch (error) {
         console.error("Error submitting:", error);
     }
