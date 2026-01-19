@@ -8,6 +8,7 @@ const { width } = Dimensions.get('window');
 
 interface PlayerResult {
   userId: string;
+  username: string; // Added username
   displayName: string;
   score: number;
   avgTime: number;
@@ -33,6 +34,7 @@ export const ResultsScreen = ({ navigation, route }: { navigation: any, route: a
 
     return {
       userId: p.userId,
+      username: p.username, // Extract username
       displayName: p.displayName,
       score: correctCount,
       avgTime: avgTime,
@@ -56,7 +58,8 @@ export const ResultsScreen = ({ navigation, route }: { navigation: any, route: a
         </View>
         
         <View style={styles.infoContainer}>
-          <Text style={styles.playerName}>{item.displayName}</Text>
+          {/* UPDATED: Display Username */}
+          <Text style={styles.playerName}>{item.username || item.displayName}</Text>
           <Text style={styles.statsText}>Avg Time: {item.avgTime.toFixed(1)}s</Text>
         </View>
 

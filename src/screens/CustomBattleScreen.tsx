@@ -1,13 +1,23 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Dimensions, Alert, TextInput, ScrollView, Modal, ActivityIndicator } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Dimensions, Alert, TextInput, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import { useFonts, Exo_700Bold, Exo_400Regular } from '@expo-google-fonts/exo';
 import { useUserStore } from '../store/userStore';
-import { getFirestore, collection, addDoc, serverTimestamp, doc, updateDoc, arrayUnion, getDocs, query, where, limit, getDoc } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, serverTimestamp, doc, updateDoc, arrayUnion, getDocs, query, where, limit } from 'firebase/firestore';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 const db = getFirestore();
+
+// Same shifts structure as Matchmaking
+const KNOWN_SHIFTS = [
+  { year: '2025', month: 'april', shiftId: '4-april-evening' },
+  { year: '2025', month: 'april', shiftId: '4-april-morning' },
+  { year: '2025', month: 'april', shiftId: '5-april-evening' },
+  { year: '2025', month: 'april', shiftId: '5-april-morning' },
+  { year: '2025', month: 'april', shiftId: '6-april-evening' },
+  { year: '2025', month: 'april', shiftId: '6-april-morning' },
+];
 
 export const CustomBattleScreen = ({ navigation }: { navigation: any }) => {
   const user = useUserStore((state) => state.user);
@@ -29,126 +39,75 @@ export const CustomBattleScreen = ({ navigation }: { navigation: any }) => {
 
   if (!fontsLoaded) return <View style={{flex: 1, backgroundColor: '#000'}} />;
 
-  // --- DEBUG TOOL ---
-  const debugFirestore = async () => {
-    setLoading(true);
-    console.log("--- STARTING DB DIAGNOSTIC ---");
-    try {
-        // Check new structure: /exams/2025/shifts/4-april-2025-evening/subjects/physics/questions
-        const path = 'exams/2025/shifts/4-april-2025-evening/subjects/physics/questions';
-        console.log(`Checking path: ${path}`);
-        
-        const qRef = collection(db, 'exams', '2025', 'shifts', '4-april-2025-evening', 'subjects', 'physics', 'questions');
-        const qSnap = await getDocs(query(qRef, limit(1)));
-        
-        if (!qSnap.empty) {
-            const data = qSnap.docs[0].data();
-            console.log("Found question:", data);
-            Alert.alert("Diagnostic Success", `Found question ID: ${qSnap.docs[0].id}\nImage URL: ${data.imageUrl || 'None'}`);
-        } else {
-            console.log("Path valid but empty results.");
-            Alert.alert("Diagnostic Result", "Path valid but no questions found. Check if '2025' or shift name matches exactly.");
-        }
-    } catch (error: any) {
-        console.error("Diagnostic Error:", error);
-        Alert.alert("Diagnostic Failed", error.message);
-    } finally {
-        setLoading(false);
-    }
-  };
-
-  // --- LOGIC: Fetch Questions ---
+  // --- LOGIC: Fetch Questions with New Path ---
   const fetchRandomQuestions = async () => {
     try {
       console.log(`Fetching questions for ${selectedSubject}...`);
       const allQuestions: any[] = [];
       
-      // Full list of shifts provided by user
-      const shifts = [
-        '2-april-2025-evening',
-        '2-april-2025-morning',
-        '22-jan-2025-morning',
-        '3-april-2025-evening',
-        '3-april-2025-morning',
-        '4-april-2025-evening',
-        '4-april-2025-morning',
-        '7-april-2025-evening',
-        '7-april-2025-morning',
-        '8-april-2025-evening'
-      ];
-      
-      const year = '2025';
-      const subject = selectedSubject.toLowerCase(); // 'physics', 'chemistry', 'math'
+      // Map subject name for DB
+      let dbSubject = selectedSubject.toLowerCase();
+      if (dbSubject === 'math') dbSubject = 'maths';
 
-      // We want random questions from ANY of these shifts. 
-      // Strategy: Shuffle shifts first, then try to fetch a few from each until we have enough.
-      const shuffledShifts = [...shifts].sort(() => 0.5 - Math.random());
+      const shuffledShifts = [...KNOWN_SHIFTS].sort(() => 0.5 - Math.random());
 
       for (const shift of shuffledShifts) {
-        // If we have enough candidates (e.g. double what we need to allow for some randomness), stop
         if (allQuestions.length >= questionCount * 3) break;
 
         try {
-            // Path: /exams/{year}/shifts/{shift}/subjects/{subject}/questions
-            const questionsRef = collection(
+            // PATH: years/2025/april/4-april-evening/subjects/maths/sections/sec-1-mcq/questions
+            // Note: Custom battles might allow numericals, so we check selectedSection
+            const sectionId = selectedSection === 'numerical' ? 'sec-2-numerical' : 'sec-1-mcq';
+
+            const qRef = collection(
                 db, 
-                'exams', year, 
-                'shifts', shift, 
-                'subjects', subject, 
+                'years', shift.year, 
+                shift.month, shift.shiftId, 
+                'subjects', dbSubject, 
+                'sections', sectionId, 
                 'questions'
             );
 
-            // Fetch a batch. Limit to 10 per shift to be efficient but get variety.
-            const qQuery = query(questionsRef, limit(10)); 
-            const qSnap = await getDocs(qQuery);
+            const qSnap = await getDocs(query(qRef, limit(10)));
 
-            if (!qSnap.empty) {
-                console.log(`Found ${qSnap.size} questions in ${shift}`);
-                qSnap.forEach(doc => {
-                    const data = doc.data();
-                    // Basic validation: ensure it has content
-                    if (data.imageUrl || data.question) {
-                        allQuestions.push({
-                            id: doc.id,
-                            question: data.question || "Question Image",
-                            imageUrl: data.imageUrl, // Cloudinary URL
-                            // Add other fields you might need
-                            options: data.options || [], 
-                            correct: data.correctOption || data.answer || '1',
-                            type: data.type || 'mcq',
-                            sourceShift: shift // Good for debugging
-                        });
-                    }
-                });
-            }
+            qSnap.forEach(doc => {
+                const data = doc.data();
+                
+                // DATA NORMALIZATION (Identical to MatchmakingScreen)
+                let qText = data.question;
+                let imgUrl = data.imageUrl || data.image || data.url || data.img;
+
+                // Check for URL stored in question text field
+                if (!imgUrl && qText && (typeof qText === 'string') && (qText.startsWith('http') || qText.includes('cloudinary') || qText.includes('firebasestorage'))) {
+                    imgUrl = qText;
+                    qText = null; 
+                }
+
+                if (imgUrl || qText) {
+                    // Extract correct answer
+                    const correctVal = data.correct ? String(data.correct) : (data.correctOption ? String(data.correctOption) : (data.answer ? String(data.answer) : '1'));
+
+                    allQuestions.push({
+                        id: doc.id,
+                        question: qText || "Identify this:", // Default text for image-only Qs
+                        imageUrl: imgUrl || null, 
+                        options: data.options || [],
+                        correct: correctVal,
+                        type: selectedSection
+                    });
+                }
+            });
         } catch (err) {
-            console.log(`Skipping shift ${shift} (Error or empty):`, err);
+            console.log(`Skipping shift ${shift.shiftId}:`, err);
         }
       }
 
       if (allQuestions.length === 0) {
-        throw new Error("No questions found in Firestore for the selected subject. Please check your database.");
+        throw new Error(`No questions found in Firestore for ${dbSubject} (${selectedSection}).`);
       }
 
-      // Filter by section if your data supports it. 
-      // If your data structure flatly puts both MCQs and Numericals in 'questions', 
-      // we'll filter here if 'type' field exists.
-      // If 'type' doesn't exist, we assume all are valid.
-      const filteredQuestions = allQuestions.filter(q => {
-          if (!q.type) return true; // Keep if unknown
-          // Normalize type check
-          const qType = q.type.toLowerCase();
-          if (selectedSection === 'mcq') return qType.includes('mcq') || qType === '1';
-          if (selectedSection === 'numerical') return qType.includes('num') || qType === '2';
-          return true;
-      });
-
-      // If filtering removed everything, fall back to mixed
-      const finalPool = filteredQuestions.length > 0 ? filteredQuestions : allQuestions;
-
       // Randomize and slice
-      const shuffled = finalPool.sort(() => 0.5 - Math.random());
-      return shuffled.slice(0, questionCount);
+      return allQuestions.sort(() => 0.5 - Math.random()).slice(0, questionCount);
 
     } catch (error: any) {
       console.error("Error fetching questions:", error);
@@ -156,7 +115,6 @@ export const CustomBattleScreen = ({ navigation }: { navigation: any }) => {
     }
   };
 
-  // --- LOGIC: Create Room ---
   const handleCreateRoom = async () => {
     if (!user) return;
     setLoading(true);
@@ -164,9 +122,8 @@ export const CustomBattleScreen = ({ navigation }: { navigation: any }) => {
     try {
       const questions = await fetchRandomQuestions();
       
-      // Double check we got questions
       if (!questions || questions.length === 0) {
-          throw new Error("Could not find enough questions to start a game.");
+          throw new Error("Could not find enough questions.");
       }
 
       const code = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -183,7 +140,11 @@ export const CustomBattleScreen = ({ navigation }: { navigation: any }) => {
         },
         players: [{
           userId: user.uid,
+          // UPDATED: Store username explicitly
+          username: (user as any).username || user.displayName,
           displayName: user.displayName || 'Player',
+          // UPDATED: Store selected character
+          selectedCharacter: (user as any).selectedCharacter || 'mint',
           score: 0,
           isReady: true 
         }],
@@ -202,7 +163,6 @@ export const CustomBattleScreen = ({ navigation }: { navigation: any }) => {
     }
   };
 
-  // --- LOGIC: Join Room ---
   const handleJoinRoom = async () => {
     if (!roomCode.trim() || !user) return;
     setLoading(true);
@@ -224,7 +184,11 @@ export const CustomBattleScreen = ({ navigation }: { navigation: any }) => {
         await updateDoc(doc(db, 'battleRooms', roomDoc.id), {
           players: arrayUnion({
             userId: user.uid,
+            // UPDATED: Store username explicitly
+            username: (user as any).username || user.displayName,
             displayName: user.displayName || 'Player',
+            // UPDATED: Store selected character
+            selectedCharacter: (user as any).selectedCharacter || 'mint',
             score: 0,
             isReady: false
           })
@@ -243,8 +207,6 @@ export const CustomBattleScreen = ({ navigation }: { navigation: any }) => {
   return (
     <View style={styles.container}>
       <SafeAreaView style={{ flex: 1 }}>
-        
-        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
             <Text style={styles.backText}>← HOME</Text>
@@ -253,7 +215,6 @@ export const CustomBattleScreen = ({ navigation }: { navigation: any }) => {
           <View style={{width: 60}} />
         </View>
 
-        {/* Tab Switcher */}
         <View style={styles.tabContainer}>
           <TouchableOpacity 
             style={[styles.tab, activeTab === 'create' && styles.activeTab]} 
@@ -307,15 +268,6 @@ export const CustomBattleScreen = ({ navigation }: { navigation: any }) => {
                 >
                   {loading ? <ActivityIndicator color="#000" /> : <Text style={styles.actionBtnText}>CREATE ROOM</Text>}
                 </TouchableOpacity>
-
-                {/* DEBUG BUTTON */}
-                <TouchableOpacity 
-                  style={[styles.actionBtn, {backgroundColor: '#333', marginTop: 20}]} 
-                  onPress={debugFirestore}
-                  disabled={loading}
-                >
-                  <Text style={[styles.actionBtnText, {color: '#FFF', fontSize: 12}]}>DEBUG DB (CHECK LOGS)</Text>
-                </TouchableOpacity>
               </>
             ) : (
               <>
@@ -342,7 +294,6 @@ export const CustomBattleScreen = ({ navigation }: { navigation: any }) => {
 
           </BlurView>
         </ScrollView>
-
       </SafeAreaView>
     </View>
   );

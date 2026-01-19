@@ -15,7 +15,10 @@ import { CustomBattleScreen } from './src/screens/CustomBattleScreen';
 import { LobbyScreen } from './src/screens/LobbyScreen';
 import { GameScreen } from './src/screens/GameScreen'; 
 import { ResultsScreen } from './src/screens/ResultsScreen';
-import { MatchmakingScreen } from './src/screens/MatchmakingScreen'; // New Import
+import { MatchmakingScreen } from './src/screens/MatchmakingScreen';
+import { BattleHistoryScreen } from './src/screens/BattleHistoryScreen'; 
+import { RankingScreen } from './src/screens/RankingScreen';
+import { AccountScreen } from './src/screens/AccountScreen'; // New Import
 import { useUserStore, UserProfile } from './src/store/userStore';
 
 const Stack = createNativeStackNavigator();
@@ -95,6 +98,9 @@ export default function App() {
             <Stack.Screen name="Game" component={GameScreen} />
             <Stack.Screen name="Results" component={ResultsScreen} />
             <Stack.Screen name="Matchmaking" component={MatchmakingScreen} />
+            <Stack.Screen name="BattleHistory" component={BattleHistoryScreen} />
+            <Stack.Screen name="Ranking" component={RankingScreen} />
+            <Stack.Screen name="Account" component={AccountScreen} />
           </Stack.Group>
         )}
       </Stack.Navigator>

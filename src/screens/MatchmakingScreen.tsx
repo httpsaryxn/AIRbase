@@ -41,24 +41,41 @@ const AVATARS: { [key: string]: any } = {
   'default': require('../assets/mint.png')
 };
 
-export const MatchmakingScreen = ({ navigation }: { navigation: any }) => {
+// Known Shifts Data Structure for Random Fetching
+const KNOWN_SHIFTS = [
+  { year: '2025', month: 'april', shiftId: '4-april-evening' },
+  { year: '2025', month: 'april', shiftId: '4-april-morning' },
+  { year: '2025', month: 'april', shiftId: '5-april-evening' },
+  { year: '2025', month: 'april', shiftId: '5-april-morning' },
+  { year: '2025', month: 'april', shiftId: '6-april-evening' },
+  { year: '2025', month: 'april', shiftId: '6-april-morning' },
+  { year: '2025', month: 'april', shiftId: '8-april-evening' },
+  { year: '2025', month: 'april', shiftId: '8-april-morning' },
+  { year: '2025', month: 'april', shiftId: '9-april-evening' },
+  { year: '2025', month: 'april', shiftId: '9-april-morning' },
+];
+
+export const MatchmakingScreen = ({ navigation, route }: { navigation: any, route: any }) => {
   const user = useUserStore((state) => state.user);
   
+  // Get subject from params, default to Physics if missing
+  const { subject = 'physics' } = route.params || {};
+
   // UI States
   const [matchFound, setMatchFound] = useState(false);
   const [opponent, setOpponent] = useState<{name: string, avatar: string} | null>(null);
   const [countdown, setCountdown] = useState<number | string | null>(null);
-  const [statusText, setStatusText] = useState('SCANNING FOR OPPONENTS...');
+  const [statusText, setStatusText] = useState(`SCANNING FOR ${subject.toUpperCase()} OPPONENTS...`);
   
-  // Data State for Navigation
-  const [pendingGameData, setPendingGameData] = useState<{roomId: string, roomData: any} | null>(null);
+  // Ref to hold game data synchronously for the timeout closure
+  const gameDataRef = useRef<{roomId: string, roomData: any} | null>(null);
 
   // Animation Values
-  const pulseAnim = useRef(new Animated.Value(1)).current;     // Searching Pulse
-  const leftSlide = useRef(new Animated.Value(-width)).current; // User Slide
-  const rightSlide = useRef(new Animated.Value(width)).current; // Opponent Slide
-  const vsScale = useRef(new Animated.Value(0)).current;        // VS Badge
-  const countScale = useRef(new Animated.Value(0.5)).current;   // Countdown Pulse
+  const pulseAnim = useRef(new Animated.Value(1)).current;     
+  const leftSlide = useRef(new Animated.Value(-width)).current; 
+  const rightSlide = useRef(new Animated.Value(width)).current; 
+  const vsScale = useRef(new Animated.Value(0)).current;        
+  const countScale = useRef(new Animated.Value(0.5)).current;   
   const countOpacity = useRef(new Animated.Value(0)).current;
 
   let [fontsLoaded] = useFonts({
@@ -67,7 +84,6 @@ export const MatchmakingScreen = ({ navigation }: { navigation: any }) => {
     Exo_400Regular,
   });
 
-  // 1. Searching Pulse Animation
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
@@ -77,7 +93,6 @@ export const MatchmakingScreen = ({ navigation }: { navigation: any }) => {
     ).start();
   }, []);
 
-  // 2. Matchmaking Logic
   useEffect(() => {
     if (!user) return;
     
@@ -86,11 +101,17 @@ export const MatchmakingScreen = ({ navigation }: { navigation: any }) => {
 
     const startMatchmaking = async () => {
       try {
+        let subjectLower = subject.toLowerCase();
+        // Normalize subject names for DB query
+        if (subjectLower === 'math' || subjectLower === 'mathematics') {
+            subjectLower = 'maths';
+        }
+
         // A. Check for waiting players
         const q = query(
           collection(db, 'matchmakingQueue'), 
           where('status', '==', 'waiting'),
-          where('subject', '==', 'physics'), // Default subject
+          where('subject', '==', subjectLower), 
           limit(1)
         );
         
@@ -98,17 +119,14 @@ export const MatchmakingScreen = ({ navigation }: { navigation: any }) => {
         const validOpponent = snapshot.docs.find(d => d.data().userId !== user.uid);
 
         if (validOpponent) {
-          // --- FOUND SOMEONE (WE ARE THE HOST) ---
           setStatusText('OPPONENT DETECTED. INITIATING LINK...');
-          
           const opponentData = validOpponent.data();
           
-          // Verify they are still waiting (simple check)
           if (opponentData.status !== 'waiting') {
-             // Race condition: Retry or create own (fallthrough to create)
+             // Race condition
           } else {
-             // 1. Create Room
-             const { roomId, roomData } = await createQuickMatchRoom(user, opponentData);
+             // 1. Create Room with Real Questions using normalized subject
+             const { roomId, roomData } = await createQuickMatchRoom(user, opponentData, subjectLower);
              
              // 2. Notify Opponent
              await updateDoc(doc(db, 'matchmakingQueue', validOpponent.id), {
@@ -117,14 +135,14 @@ export const MatchmakingScreen = ({ navigation }: { navigation: any }) => {
                  roomId: roomId
              });
 
-             // 3. Setup Local State for VS Screen
+             // 3. Setup Data
              setOpponent({
-                 name: opponentData.displayName || 'Opponent',
+                 name: opponentData.username || opponentData.displayName || 'Opponent',
                  avatar: opponentData.selectedCharacter || 'default'
              });
-             setPendingGameData({ roomId, roomData });
              
-             // 4. Trigger Animation
+             gameDataRef.current = { roomId, roomData };
+             
              triggerMatchFound();
              return;
           }
@@ -133,32 +151,32 @@ export const MatchmakingScreen = ({ navigation }: { navigation: any }) => {
         // --- NO ONE FOUND, WAITING IN QUEUE ---
         const myEntry = await addDoc(collection(db, 'matchmakingQueue'), {
             userId: user.uid,
+            username: (user as any).username || user.displayName,
             displayName: user.displayName,
             selectedCharacter: (user as any).selectedCharacter || 'mint',
             status: 'waiting',
-            subject: 'physics',
+            subject: subjectLower,
             createdAt: serverTimestamp()
         });
         matchmakingDocId = myEntry.id;
 
-        // Listen for updates
         unsubMatch = onSnapshot(doc(db, 'matchmakingQueue', myEntry.id), async (snap) => {
             if (snap.exists()) {
                 const data = snap.data();
                 if (data.status === 'matched' && data.roomId) {
                     setStatusText('MATCH CONFIRMED. DOWNLOADING DATA...');
                     
-                    // Fetch Room to get Opponent Details
                     const roomSnap = await getDoc(doc(db, 'battleRooms', data.roomId));
                     if (roomSnap.exists()) {
                         const rData = roomSnap.data();
                         const opp = rData.players.find((p: any) => p.userId !== user.uid);
                         
                         setOpponent({
-                            name: opp.displayName || 'Opponent',
+                            name: opp.username || opp.displayName || 'Opponent',
                             avatar: opp.selectedCharacter || 'default'
                         });
-                        setPendingGameData({ roomId: data.roomId, roomData: rData });
+                        
+                        gameDataRef.current = { roomId: data.roomId, roomData: rData };
                         triggerMatchFound();
                     }
                 }
@@ -176,26 +194,25 @@ export const MatchmakingScreen = ({ navigation }: { navigation: any }) => {
 
     return () => {
         if (unsubMatch) unsubMatch();
-        // Only delete if we are strictly canceling, not if we found a match
         if (matchmakingDocId && !matchFound) {
             deleteDoc(doc(db, 'matchmakingQueue', matchmakingDocId)).catch(err => console.log("Cleanup err", err));
         }
     };
   }, []);
 
-  // 3. Helper: Create Room
-  const createQuickMatchRoom = async (currentUser: any, opponentData: any) => {
-       const questions = await fetchRandomQuestions(); 
+  const createQuickMatchRoom = async (currentUser: any, opponentData: any, selectedSubject: string) => {
+       const questions = await fetchRandomQuestions(selectedSubject); 
        
        const newRoomData = {
           roomCode: 'QUICK',
           createdBy: currentUser.uid,
           createdAt: serverTimestamp(),
           status: 'active',
-          settings: { subject: 'physics', section: 'mcq', questionCount: 5 },
+          settings: { subject: selectedSubject, section: 'mcq', questionCount: 5 },
           players: [
               { 
                 userId: opponentData.userId, 
+                username: opponentData.username || opponentData.displayName,
                 displayName: opponentData.displayName || 'Opponent', 
                 selectedCharacter: opponentData.selectedCharacter || 'default',
                 score: 0, 
@@ -203,6 +220,7 @@ export const MatchmakingScreen = ({ navigation }: { navigation: any }) => {
               },
               { 
                 userId: currentUser.uid, 
+                username: (currentUser as any).username || currentUser.displayName,
                 displayName: currentUser.displayName || 'Player',
                 selectedCharacter: (currentUser as any).selectedCharacter || 'mint',
                 score: 0, 
@@ -217,88 +235,94 @@ export const MatchmakingScreen = ({ navigation }: { navigation: any }) => {
        return { roomId: roomRef.id, roomData: newRoomData };
   };
 
-  // 4. Helper: Fetch REAL Questions from Firestore
-  const fetchRandomQuestions = async () => {
+  const fetchRandomQuestions = async (subjectInput: string) => {
     try {
-      const allQuestions: any[] = [];
-      const shifts = [
-        '2-april-2025-evening', '2-april-2025-morning', '22-jan-2025-morning',
-        '3-april-2025-evening', '3-april-2025-morning', '4-april-2025-evening',
-        '4-april-2025-morning', '7-april-2025-evening', '7-april-2025-morning',
-        '8-april-2025-evening'
-      ];
+      let dbSubject = subjectInput.toLowerCase();
+      if (dbSubject === 'math' || dbSubject === 'mathematics') dbSubject = 'maths';
       
-      // Shuffle shifts to randomize source
-      const shuffledShifts = [...shifts].sort(() => 0.5 - Math.random());
+      if (dbSubject.includes('random') || dbSubject.includes('all')) {
+          const subs = ['physics', 'chemistry', 'maths'];
+          dbSubject = subs[Math.floor(Math.random() * subs.length)];
+      }
+
+      console.log(`Fetching questions for subject: ${dbSubject}`);
+
+      const allQuestions: any[] = [];
+      const shuffledShifts = [...KNOWN_SHIFTS].sort(() => 0.5 - Math.random());
       
       for (const shift of shuffledShifts) {
-        if (allQuestions.length >= 10) break; // Get a pool, then slice
+        if (allQuestions.length >= 8) break; 
         
-        const qRef = collection(db, 'exams', '2025', 'shifts', shift, 'subjects', 'physics', 'questions');
-        // Fetch a few from this shift
-        const qSnap = await getDocs(query(qRef, limit(5)));
-        
-        qSnap.forEach(doc => {
-            const data = doc.data();
-            if (data.imageUrl || data.question) {
-                allQuestions.push({
-                    id: doc.id,
-                    question: data.question || "Question Image",
-                    imageUrl: data.imageUrl,
-                    options: data.options || [],
-                    correct: data.correctOption || data.answer || '1',
-                    type: data.type || 'mcq'
-                });
-            }
-        });
+        try {
+            const qRef = collection(
+                db, 
+                'years', shift.year, 
+                shift.month, shift.shiftId, 
+                'subjects', dbSubject, 
+                'sections', 'sec-1-mcq', 
+                'questions'
+            );
+            
+            const qSnap = await getDocs(query(qRef, limit(5)));
+            
+            qSnap.forEach(doc => {
+                const data = doc.data();
+                
+                let qText = data.question;
+                let imgUrl = data.imageUrl || data.image || data.url || data.img;
+
+                if (!imgUrl && qText && (qText.startsWith('http') || qText.includes('cloudinary'))) {
+                    imgUrl = qText;
+                    qText = null;
+                }
+
+                if (imgUrl || qText) {
+                    const correctVal = data.correct ? String(data.correct) : (data.correctOption ? String(data.correctOption) : (data.answer ? String(data.answer) : '1'));
+
+                    allQuestions.push({
+                        id: doc.id,
+                        question: qText || "Identify this:",
+                        imageUrl: imgUrl || null, 
+                        options: data.options || [],
+                        correct: correctVal,
+                        type: 'mcq' 
+                    });
+                }
+            });
+        } catch (err) {
+            console.log(`Failed to fetch from ${shift.shiftId}:`, err);
+        }
       }
       
       if (allQuestions.length === 0) {
-          // Fallback if DB is empty
+          console.log("No questions found, using fallbacks.");
           return [
-              { id: 'q1', question: 'Unit of Force?', options: ['Newton', 'Joule', 'Watt', 'Pascal'], correct: '1', type: 'mcq' },
-              { id: 'q2', question: 'Vector Quantity?', options: ['Speed', 'Velocity', 'Mass', 'Time'], correct: '2', type: 'mcq' }
+              { id: 'f1', question: `Fallback: Unit of Force (${dbSubject})?`, options: ['N', 'J', 'W', 'P'], correct: '1', type: 'mcq', imageUrl: null },
+              { id: 'f2', question: 'Fallback: Vector Quantity?', options: ['Speed', 'Velocity', 'Mass', 'Time'], correct: '2', type: 'mcq', imageUrl: null }
           ];
       }
 
-      // Shuffle and take 5
       return allQuestions.sort(() => 0.5 - Math.random()).slice(0, 5);
 
     } catch (e) {
-      console.log("Error fetching questions", e);
+      console.log("Critical Error fetching questions", e);
       return []; 
     }
   };
 
-  // 5. Trigger VS Animation
   const triggerMatchFound = () => {
     setMatchFound(true);
 
     Animated.parallel([
-      Animated.spring(leftSlide, {
-        toValue: 0,
-        useNativeDriver: true,
-        damping: 15,
-        stiffness: 100,
-      }),
-      Animated.spring(rightSlide, {
-        toValue: 0,
-        useNativeDriver: true,
-        damping: 15,
-        stiffness: 100,
-      }),
+      Animated.spring(leftSlide, { toValue: 0, useNativeDriver: true, damping: 15, stiffness: 100 }),
+      Animated.spring(rightSlide, { toValue: 0, useNativeDriver: true, damping: 15, stiffness: 100 }),
       Animated.sequence([
           Animated.delay(400),
-          Animated.spring(vsScale, {
-            toValue: 1,
-            friction: 4,
-            useNativeDriver: true,
-          })
+          Animated.spring(vsScale, { toValue: 1, friction: 4, useNativeDriver: true })
       ])
     ]).start(() => startCountdown());
   };
 
-  // 6. Countdown Logic
   const startCountdown = () => {
     let count = 3;
     setCountdown(count);
@@ -325,11 +349,15 @@ export const MatchmakingScreen = ({ navigation }: { navigation: any }) => {
         setCountdown("BATTLE!");
         pulse();
         
-        // NAVIGATE TO GAME SCREEN (Using existing GameScreen logic)
         setTimeout(() => {
-           if (pendingGameData) {
-               // We replace, so they can't go back to matchmaking easily
-               navigation.replace('Game', { roomId: pendingGameData.roomId, roomData: pendingGameData.roomData });
+           if (gameDataRef.current) {
+               navigation.replace('Game', { 
+                   roomId: gameDataRef.current.roomId, 
+                   roomData: gameDataRef.current.roomData 
+               });
+           } else {
+               Alert.alert("Error", "Failed to load match data.");
+               navigation.goBack();
            }
         }, 1000);
       }
@@ -338,21 +366,17 @@ export const MatchmakingScreen = ({ navigation }: { navigation: any }) => {
 
   if (!fontsLoaded) return <View style={{flex: 1, backgroundColor: '#000'}} />;
 
-  // --- RENDER: SEARCHING STATE ---
   if (!matchFound) {
       return (
         <View style={styles.container}>
             <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
                 <BlurView intensity={20} tint="dark" style={styles.card}>
                     <Animated.View style={[styles.pulseCircle, { transform: [{ scale: pulseAnim }] }]} />
+                    {/* UPDATED: Circular Frame for Searching Avatar */}
                     <View style={styles.avatarContainer}>
-                        <Image 
-                            source={AVATARS[(user as any)?.selectedCharacter || 'mint']} 
-                            style={styles.searchingAvatar} 
-                        />
+                        <Image source={AVATARS[(user as any)?.selectedCharacter || 'mint']} style={styles.searchingAvatar} resizeMode="cover" />
                     </View>
                     <Text style={styles.statusText}>{statusText}</Text>
-                    
                     <TouchableOpacity style={styles.cancelBtn} onPress={() => navigation.goBack()}>
                         <Text style={styles.cancelText}>CANCEL SEARCH</Text>
                     </TouchableOpacity>
@@ -362,18 +386,17 @@ export const MatchmakingScreen = ({ navigation }: { navigation: any }) => {
       );
   }
 
-  // --- RENDER: VS STATE ---
   return (
     <View style={styles.vsContainer}>
-      
-      {/* Top Half: Opponent */}
       <Animated.View style={[styles.playerSection, styles.opponentSection, { transform: [{ translateX: rightSlide }] }]}>
-        <Image source={AVATARS[opponent?.avatar || 'default']} style={styles.vsAvatar} resizeMode="contain" />
+        {/* UPDATED: Circular Frame for VS Avatar */}
+        <View style={styles.vsAvatarContainer}>
+            <Image source={AVATARS[opponent?.avatar || 'default']} style={styles.vsAvatar} resizeMode="cover" />
+        </View>
         <Text style={styles.vsName}>{opponent?.name?.toUpperCase()}</Text>
         <Text style={styles.vsLabel}>OPPONENT</Text>
       </Animated.View>
 
-      {/* VS Badge */}
       <View style={styles.badgeContainer}>
         <Animated.View style={{ transform: [{ scale: vsScale }] }}>
           <BlurView intensity={50} tint="light" style={styles.vsBadge}>
@@ -382,29 +405,23 @@ export const MatchmakingScreen = ({ navigation }: { navigation: any }) => {
         </Animated.View>
       </View>
 
-      {/* Bottom Half: You */}
       <Animated.View style={[styles.playerSection, styles.userSection, { transform: [{ translateX: leftSlide }] }]}>
         <Text style={styles.vsLabel}>YOU</Text>
-        <Text style={styles.vsName}>{user?.displayName?.toUpperCase()}</Text>
-        <Image source={AVATARS[(user as any)?.selectedCharacter || 'mint']} style={styles.vsAvatar} resizeMode="contain" />
+        <Text style={styles.vsName}>{(user as any)?.username?.toUpperCase() || user?.displayName?.toUpperCase()}</Text>
+        {/* UPDATED: Circular Frame for VS Avatar */}
+        <View style={styles.vsAvatarContainer}>
+            <Image source={AVATARS[(user as any)?.selectedCharacter || 'mint']} style={styles.vsAvatar} resizeMode="cover" />
+        </View>
       </Animated.View>
 
-      {/* Countdown Overlay */}
       {countdown !== null && (
         <View style={styles.countdownOverlay}>
-          <Animated.Text style={[
-            styles.countdownText, 
-            { transform: [{ scale: countScale }], opacity: countOpacity }
-          ]}>
+          <Animated.Text style={[styles.countdownText, { transform: [{ scale: countScale }], opacity: countOpacity }]}>
             {typeof countdown === 'number' ? countdown : ''}
           </Animated.Text>
-          {/* Static text for "BATTLE!" to avoid opacity fade issues on final frame */}
-          {typeof countdown === 'string' && (
-              <Text style={styles.battleText}>{countdown}</Text>
-          )}
+          {typeof countdown === 'string' && <Text style={styles.battleText}>{countdown}</Text>}
         </View>
       )}
-
     </View>
   );
 };
@@ -412,81 +429,47 @@ export const MatchmakingScreen = ({ navigation }: { navigation: any }) => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
   card: { padding: 40, borderRadius: 24, alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.05)', minWidth: 320 },
+  pulseCircle: { position: 'absolute', width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(20, 241, 149, 0.2)' },
   
-  // Searching Styles
-  pulseCircle: { 
-      position: 'absolute',
-      width: 200, height: 200, 
-      borderRadius: 100, 
-      backgroundColor: 'rgba(20, 241, 149, 0.2)', 
-  },
-  avatarContainer: {
-      width: 120, height: 120, borderRadius: 60,
-      backgroundColor: '#000',
+  // Searching Avatar Container
+  avatarContainer: { 
+      width: 120, height: 120, 
+      borderRadius: 60, 
+      backgroundColor: '#000', 
       justifyContent: 'center', alignItems: 'center',
       marginBottom: 30, borderWidth: 2, borderColor: '#14F195',
-      overflow: 'hidden'
+      overflow: 'hidden' 
   },
-  searchingAvatar: { width: 100, height: 100, resizeMode: 'contain' },
+  searchingAvatar: { width: '100%', height: '100%' },
+  
   statusText: { color: '#FFF', fontFamily: 'Exo_700Bold', fontSize: 16, marginBottom: 30, textAlign: 'center', letterSpacing: 1 },
   cancelBtn: { padding: 10 },
   cancelText: { color: '#FF5252', fontFamily: 'Exo_700Bold' },
-
-  // VS Screen Styles
   vsContainer: { flex: 1, backgroundColor: '#000' },
-  playerSection: {
-    position: 'absolute',
-    left: 0, right: 0, height: height / 2,
-    justifyContent: 'center', alignItems: 'center',
-    zIndex: 1,
+  playerSection: { position: 'absolute', left: 0, right: 0, height: height / 2, justifyContent: 'center', alignItems: 'center', zIndex: 1 },
+  opponentSection: { top: 0, backgroundColor: '#1a1a2e', borderBottomWidth: 2, borderColor: '#333' },
+  userSection: { bottom: 0, backgroundColor: '#121212' },
+  
+  // VS Screen Avatar Container
+  vsAvatarContainer: {
+      width: 180, height: 180, 
+      borderRadius: 90, 
+      overflow: 'hidden', 
+      marginVertical: 10,
+      borderWidth: 3,
+      borderColor: '#FFF',
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: '#000'
   },
-  opponentSection: {
-    top: 0,
-    backgroundColor: '#1a1a2e', // Deep purple/blue for opponent
-    borderBottomWidth: 2, borderColor: '#333',
-  },
-  userSection: {
-    bottom: 0,
-    backgroundColor: '#121212', // Dark grey for user
-  },
-  vsAvatar: { width: 180, height: 180, marginVertical: 10 },
-  vsName: {
-    fontSize: 32, fontFamily: 'Exo_900Black', color: '#FFF',
-    textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width:0, height:2}, textShadowRadius: 4
-  },
-  vsLabel: {
-    fontSize: 12, fontFamily: 'Exo_700Bold', color: 'rgba(255,255,255,0.5)', letterSpacing: 3, marginVertical: 5
-  },
-
-  // VS Badge
-  badgeContainer: {
-    position: 'absolute', top: height / 2 - 50, left: width / 2 - 50, zIndex: 10
-  },
-  vsBadge: {
-    width: 100, height: 100, borderRadius: 50,
-    justifyContent: 'center', alignItems: 'center',
-    backgroundColor: 'rgba(255, 59, 48, 0.9)', // Red
-    borderWidth: 4, borderColor: '#FFF',
-    overflow: 'hidden'
-  },
-  vsText: {
-    fontSize: 40, fontFamily: 'Exo_900Black', color: '#FFF', fontStyle: 'italic', marginLeft: -5
-  },
-
-  // Countdown
-  countdownOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center', alignItems: 'center', zIndex: 20,
-    backgroundColor: 'rgba(0,0,0,0.2)'
-  },
-  countdownText: {
-    fontSize: 150, fontFamily: 'Exo_900Black', color: '#14F195',
-    textShadowColor: 'rgba(20, 241, 149, 0.8)', textShadowRadius: 20
-  },
-  battleText: {
-    position: 'absolute',
-    fontSize: 80, fontFamily: 'Exo_900Black', color: '#FFD700',
-    textShadowColor: '#000', textShadowOffset: {width:2, height:2}, textShadowRadius: 10,
-    transform: [{rotate: '-5deg'}]
-  }
+  vsAvatar: { width: '100%', height: '100%' },
+  
+  vsName: { fontSize: 32, fontFamily: 'Exo_900Black', color: '#FFF', textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: {width:0, height:2}, textShadowRadius: 4 },
+  vsLabel: { fontSize: 12, fontFamily: 'Exo_700Bold', color: 'rgba(255,255,255,0.5)', letterSpacing: 3, marginVertical: 5 },
+  badgeContainer: { position: 'absolute', top: height / 2 - 50, left: width / 2 - 50, zIndex: 10 },
+  vsBadge: { width: 100, height: 100, borderRadius: 50, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(255, 59, 48, 0.9)', borderWidth: 4, borderColor: '#FFF', overflow: 'hidden' },
+  vsText: { fontSize: 40, fontFamily: 'Exo_900Black', color: '#FFF', fontStyle: 'italic', marginLeft: -5 },
+  countdownOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', zIndex: 20, backgroundColor: 'rgba(0,0,0,0.2)' },
+  countdownText: { fontSize: 150, fontFamily: 'Exo_900Black', color: '#14F195', textShadowColor: 'rgba(20, 241, 149, 0.8)', textShadowRadius: 20 },
+  battleText: { position: 'absolute', fontSize: 80, fontFamily: 'Exo_900Black', color: '#FFD700', textShadowColor: '#000', textShadowOffset: {width:2, height:2}, textShadowRadius: 10, transform: [{rotate: '-5deg'}] }
 });

@@ -9,14 +9,22 @@ import { useUserStore } from '../store/userStore';
 const { width, height } = Dimensions.get('window');
 
 // Video sources mapping
-const CHARACTER_VIDEOS = {
+// Ensure keys match the IDs used in Account/Linking screens (lowercase)
+const CHARACTER_VIDEOS: { [key: string]: any } = {
   mint: require('../assets/mint.mp4'),   
   yellow: require('../assets/yellow.mp4'), 
+  // Fallback for others if no video exists yet, default to mint
+  lavender: require('../assets/mint.mp4'), 
+  orange: require('../assets/yellow.mp4'),
+  default: require('../assets/mint.mp4'),
 };
 
-const THEME_COLORS = {
+const THEME_COLORS: { [key: string]: string } = {
   mint: '#A8DBCD',
   yellow: '#F9E392',
+  lavender: '#E6E6FA',
+  orange: '#FFD580',
+  default: '#A8DBCD'
 };
 
 const RANK_BADGES = {
@@ -95,7 +103,10 @@ export const HomeScreen = ({ navigation }: { navigation: any }) => {
   const [battleMode, setBattleMode] = useState<'quick' | 'custom'>('quick');
   const [isBattleDropdownOpen, setIsBattleDropdownOpen] = useState(false);
 
-  const [currentTheme, setCurrentTheme] = useState<'mint' | 'yellow'>('mint'); 
+  // Determine current theme from user store
+  const userChar = (user as any)?.selectedCharacter || 'mint';
+  const currentTheme = CHARACTER_VIDEOS[userChar] ? userChar : 'mint';
+  
   const subjects = ['ALL(random)', 'Physics', 'Chemistry', 'Math'];
 
   let [fontsLoaded] = useFonts({
@@ -109,8 +120,9 @@ export const HomeScreen = ({ navigation }: { navigation: any }) => {
     player.muted = true;
   });
 
+  // Effect to update video when user character changes
   useEffect(() => {
-    if (player) {
+    if (player && CHARACTER_VIDEOS[currentTheme]) {
       player.replace(CHARACTER_VIDEOS[currentTheme]);
       player.loop = true;
       player.play();
@@ -123,7 +135,7 @@ export const HomeScreen = ({ navigation }: { navigation: any }) => {
 
   const displayUser: DisplayUser = user ? {
     displayName: user.displayName || "Agent",
-    username: (user as any).username || user.displayName || "Agent",
+    username: (user as any).username || user.displayName || "Agent", 
     rank: user.rank || "Bronze",
     xp: user.xp || 0,
     coaching: (user as any).coaching || "PhysicsWallah",
@@ -142,7 +154,7 @@ export const HomeScreen = ({ navigation }: { navigation: any }) => {
     if (battleMode === 'custom') {
         navigation.navigate('CustomBattle');
     } else {
-        navigation.navigate('Matchmaking'); 
+        navigation.navigate('Matchmaking', { subject: selectedSubject }); 
     }
   };
 
@@ -158,7 +170,7 @@ export const HomeScreen = ({ navigation }: { navigation: any }) => {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: THEME_COLORS[currentTheme] }]}>
+    <View style={[styles.container, { backgroundColor: THEME_COLORS[currentTheme] || THEME_COLORS['default'] }]}>
       <View style={styles.heroContainer}>
         <View style={styles.characterVideoContainer}>
            <VideoView
@@ -208,7 +220,7 @@ export const HomeScreen = ({ navigation }: { navigation: any }) => {
       <SafeAreaView style={styles.headerSafeArea} edges={['top']}>
         <View style={styles.header}>
             <View style={{position: 'relative', flexDirection: 'row', alignItems: 'center'}}>
-                <TouchableOpacity style={styles.profileButton}>
+                <TouchableOpacity style={styles.profileButton} onPress={() => navigation.navigate('Account')}>
                     <View style={styles.avatarCircle}>
                         <Text style={{fontSize: 24}}>👤</Text>
                     </View>
@@ -333,23 +345,41 @@ export const HomeScreen = ({ navigation }: { navigation: any }) => {
       <View style={styles.bottomNavContainer}>
         <View style={{position: 'relative'}}>
             <BlurView intensity={30} tint="light" style={styles.bottomNav}>
-                <TouchableOpacity style={styles.navItem} onPress={() => setCurrentTheme(currentTheme === 'mint' ? 'yellow' : 'mint')}>
+                {/* REMOVED onPress toggling theme */}
+                <TouchableOpacity style={styles.navItem}>
                     <Text style={{fontSize: 24, color: '#000'}}>🏠</Text>
                     <View style={styles.activeDot} />
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.navItem}>
+                <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Ranking')}>
                     <Text style={{fontSize: 24, color: 'rgba(0,0,0,0.5)'}}>🏆</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.navItem}>
-                    <Text style={{fontSize: 24, color: 'rgba(0,0,0,0.5)'}}>👤</Text>
+                <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('BattleHistory')}>
+                    <Text style={{fontSize: 24, color: 'rgba(0,0,0,0.5)'}}>📜</Text>
                 </TouchableOpacity>
             </BlurView>
+            
+            {/* Tutorial Clouds for Bottom Nav */}
             <TutorialCloud 
-              text="Menu" 
-              style={{ position: 'absolute', top: -45, alignSelf: 'center' }} 
-              delay={1200}
+              text="Home Base" 
+              style={{ position: 'absolute', top: 15, left: -60 }} 
+              delay={1400}
+              arrowDirection="right"
+            />
+            
+            <TutorialCloud 
+              text="Rankings" 
+              style={{ position: 'absolute', top: -25, left: 90 }} 
+              delay={1600}
+              arrowDirection="down"
+            />
+
+            <TutorialCloud 
+              text="History" 
+              style={{ position: 'absolute', top: 15, right: -40 }} 
+              delay={1800}
+              arrowDirection="left"
             />
         </View>
       </View>
@@ -560,7 +590,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.05)',
   },
   
-  // NEW STYLES FOR REDESIGNED BATTLE BUTTON
+  // BUTTON STYLES
   splitButtonContainer: {
     width: 160,
     height: 65,
@@ -579,7 +609,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     height: '100%',
-    paddingLeft: 0, // Removed to ensure center alignment
+    paddingLeft: 0, 
   },
   splitDivider: {
     width: 1,
@@ -591,11 +621,11 @@ const styles = StyleSheet.create({
     height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)', // Slightly distinct area
+    backgroundColor: 'rgba(255,255,255,0.1)',
   },
   battleButtonText: {
     color: '#000',
-    fontSize: 16, // Slightly smaller to fit "CUSTOM GAME"
+    fontSize: 16, 
     fontFamily: 'Exo_700Bold', 
     letterSpacing: 0.5,
     textAlign: 'center',
@@ -630,7 +660,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Exo_700Bold',
   },
   battleOptionSelected: {
-    color: '#FFF', // Highlight selected option
+    color: '#FFF', 
   },
   battleDivider: {
     height: 1,
@@ -706,7 +736,6 @@ const styles = StyleSheet.create({
     borderRightColor: 'transparent',
     borderTopColor: '#FFF',
   },
-  // Added style for upward pointing tail
   cloudTailUp: {
     bottom: 'auto',
     top: -6,
@@ -714,11 +743,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: 6,
     borderBottomColor: '#FFF',
   },
-  // Added style for Left pointing tail (placed on right side of cloud)
   cloudTailLeft: {
     bottom: 'auto',
-    top: 10, // Adjust vertical pos
-    left: -6, // Push outside left edge
+    top: 10, 
+    left: -6, 
     borderTopWidth: 6,
     borderBottomWidth: 6,
     borderRightWidth: 6,
@@ -727,7 +755,6 @@ const styles = StyleSheet.create({
     borderBottomColor: 'transparent',
     borderRightColor: '#FFF',
   },
-  // Added style for Right pointing tail
   cloudTailRight: {
     bottom: 'auto',
     top: 10,
